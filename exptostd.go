@@ -1,4 +1,4 @@
-// Package exptostd It is an analyzer that detects functions from golang.org/x/exp/ replaced by std functions.
+// Package exptostd It is an analyzer that detects functions from golang.org/x/exp/ that can be replaced by std functions.
 package exptostd
 
 import (
@@ -86,7 +86,7 @@ func NewAnalyzer() *analysis.Analyzer {
 
 	return &analysis.Analyzer{
 		Name:     "exptostd",
-		Doc:      "reports functions from golang.org/x/exp/ replaced by std functions",
+		Doc:      "Detects functions from golang.org/x/exp/ that can be replaced by std functions.",
 		Run:      l.run,
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	}

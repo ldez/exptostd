@@ -1,6 +1,6 @@
 # ExpToStd
 
-Detects functions from golang.org/x/exp/ replaced by std functions.
+Detects functions from golang.org/x/exp/ that can be replaced by std functions.
 
 [![Sponsor](https://img.shields.io/badge/Sponsor%20me-%E2%9D%A4%EF%B8%8F-pink)](https://github.com/sponsors/ldez)
 
