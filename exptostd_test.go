@@ -17,16 +17,20 @@ func TestAnalyzer(t *testing.T) {
 	}{
 		{dir: "expmaps"},
 		{dir: "expslices"},
+		{dir: "expboth"},
+		{dir: "expnone"},
+		{dir: "expmixed"},
+		{dir: "expalias"},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.dir, func(t *testing.T) {
-			run(t, exptostd.NewAnalyzer(), test.dir)
+			runWithSuggestedFixes(t, exptostd.NewAnalyzer(), test.dir)
 		})
 	}
 }
 
-func run(t *testing.T, a *analysis.Analyzer, dir string, patterns ...string) []*analysistest.Result {
+func runWithSuggestedFixes(t *testing.T, a *analysis.Analyzer, dir string, patterns ...string) []*analysistest.Result {
 	t.Helper()
 
 	wd, err := os.Getwd()
@@ -60,5 +64,5 @@ func run(t *testing.T, a *analysis.Analyzer, dir string, patterns ...string) []*
 		t.Fatal(err)
 	}
 
-	return analysistest.Run(t, srcPath, a, patterns...)
+	return analysistest.RunWithSuggestedFixes(t, srcPath, a, patterns...)
 }
