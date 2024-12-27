@@ -23,8 +23,9 @@ const (
 )
 
 type stdReplacement struct {
-	MinGo int
-	Text  string
+	MinGo      int
+	Text       string
+	KeepImport bool
 }
 
 type analyzer struct {
@@ -52,7 +53,7 @@ func NewAnalyzer() *analysis.Analyzer {
 			"Clone":      {MinGo: go121, Text: "maps.Clone()"},
 			"Copy":       {MinGo: go121, Text: "maps.Copy()"},
 			"DeleteFunc": {MinGo: go121, Text: "maps.DeleteFunc()"},
-			"Clear":      {MinGo: go121, Text: "clear()"},
+			"Clear":      {MinGo: go121, Text: "clear()", KeepImport: true},
 		},
 		slicesPkgReplacements: map[string]stdReplacement{
 			"Equal":        {MinGo: go121, Text: "slices.Equal()"},
@@ -180,7 +181,7 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 
 	if pkg.Imported().Path() == importPath {
 		pass.Reportf(callExpr.Pos(), "%s.%s() can be replaced by %s", importPath, selExpr.Sel.Name, rp.Text)
-		return true
+		return !rp.KeepImport
 	}
 
 	return false
