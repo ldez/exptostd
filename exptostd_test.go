@@ -16,6 +16,7 @@ func TestAnalyzer(t *testing.T) {
 		dir string
 	}{
 		{dir: "expmaps"},
+		{dir: "expmaps122"},
 		{dir: "expslices"},
 		{dir: "expboth"},
 		{dir: "expnone"},

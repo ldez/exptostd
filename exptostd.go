@@ -143,12 +143,12 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 		switch ident.Name {
 		case "maps":
-			shouldKeepExpMaps = shouldKeepExpMaps ||
-				!a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
+			usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
+			shouldKeepExpMaps = shouldKeepExpMaps || !usage
 
 		case "slices":
-			shouldKeepExpSlices = shouldKeepExpSlices ||
-				!a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
+			usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
+			shouldKeepExpSlices = shouldKeepExpSlices || !usage
 		}
 	})
 
