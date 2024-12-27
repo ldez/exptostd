@@ -118,8 +118,10 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 	insp.Preorder(nodeFilter, func(n ast.Node) {
 		if importSpec, ok := n.(*ast.ImportSpec); ok {
-			cleanedPath := trimImportPath(importSpec)
-			imports[cleanedPath] = importSpec
+			// skip aliases
+			if importSpec.Name == nil || importSpec.Name.Name == "" {
+				imports[trimImportPath(importSpec)] = importSpec
+			}
 
 			return
 		}
@@ -212,11 +214,6 @@ func (a *analyzer) maybeReplaceImport(pass *analysis.Pass, imports map[string]*a
 func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string) {
 	imp, ok := imports[importPath]
 	if !ok || shouldKeep {
-		return
-	}
-
-	// skip aliases
-	if imp.Name != nil && imp.Name.Name != "" {
 		return
 	}
 
