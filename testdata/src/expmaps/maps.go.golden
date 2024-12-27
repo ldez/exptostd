@@ -23,6 +23,6 @@ func _(m, a map[string]string) {
 		return true
 	})
 
-	maps.Clear(m) // want `golang.org/x/exp/maps.Clear\(\) can be replaced by clear\(\)`
+	clear(m) // want `golang.org/x/exp/maps.Clear\(\) can be replaced by clear\(\)`
 }
 
