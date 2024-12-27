@@ -2,9 +2,12 @@
 package exptostd
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/build"
+	"go/printer"
+	"go/token"
 	"go/types"
 	"os"
 	"slices"
@@ -23,9 +26,9 @@ const (
 )
 
 type stdReplacement struct {
-	MinGo      int
-	Text       string
-	KeepImport bool
+	MinGo     int
+	Text      string
+	Suggested func(callExpr *ast.CallExpr) (analysis.SuggestedFix, error)
 }
 
 type analyzer struct {
@@ -43,7 +46,7 @@ func NewAnalyzer() *analysis.Analyzer {
 	_, skip := os.LookupEnv("EXPTOSTD_SKIP_GO_VERSION_CHECK")
 
 	l := &analyzer{
-		importsCleaner:         strings.NewReplacer("\"", "", "`", ""),
+		importsCleaner:         strings.NewReplacer(`"`, "", "`", ""),
 		skipGoVersionDetection: skip,
 		mapsPkgReplacements: map[string]stdReplacement{
 			"Keys":       {MinGo: go123, Text: "slices.Collect(maps.Keys())"},
@@ -53,7 +56,7 @@ func NewAnalyzer() *analysis.Analyzer {
 			"Clone":      {MinGo: go121, Text: "maps.Clone()"},
 			"Copy":       {MinGo: go121, Text: "maps.Copy()"},
 			"DeleteFunc": {MinGo: go121, Text: "maps.DeleteFunc()"},
-			"Clear":      {MinGo: go121, Text: "clear()", KeepImport: true},
+			"Clear":      {MinGo: go121, Text: "clear()", Suggested: suggestedFixForClear},
 		},
 		slicesPkgReplacements: map[string]stdReplacement{
 			"Equal":        {MinGo: go121, Text: "slices.Equal()"},
@@ -97,7 +100,7 @@ func NewAnalyzer() *analysis.Analyzer {
 	}
 }
 
-func (a *analyzer) run(pass *analysis.Pass) (interface{}, error) {
+func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	insp, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	if !ok {
 		return nil, nil
@@ -180,8 +183,23 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	}
 
 	if pkg.Imported().Path() == importPath {
-		pass.Reportf(callExpr.Pos(), "%s.%s() can be replaced by %s", importPath, selExpr.Sel.Name, rp.Text)
-		return !rp.KeepImport
+		diagnostic := analysis.Diagnostic{
+			Pos:     callExpr.Pos(),
+			Message: fmt.Sprintf("%s.%s() can be replaced by %s", importPath, selExpr.Sel.Name, rp.Text),
+		}
+
+		if rp.Suggested != nil {
+			fix, err := rp.Suggested(callExpr)
+			if err != nil {
+				diagnostic.Message = fmt.Sprintf("Suggested fix error: %v", err)
+			} else {
+				diagnostic.SuggestedFixes = append(diagnostic.SuggestedFixes, fix)
+			}
+		}
+
+		pass.Report(diagnostic)
+
+		return true
 	}
 
 	return false
@@ -220,6 +238,29 @@ func (a *analyzer) suggestRemoveImport(pass *analysis.Pass, imports map[string]*
 			}},
 		}},
 	})
+}
+
+func suggestedFixForClear(callExpr *ast.CallExpr) (analysis.SuggestedFix, error) {
+	s := &ast.CallExpr{
+		Fun:      ast.NewIdent("clear"),
+		Args:     callExpr.Args,
+		Ellipsis: callExpr.Ellipsis,
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	err := printer.Fprint(buf, token.NewFileSet(), s)
+	if err != nil {
+		return analysis.SuggestedFix{}, fmt.Errorf("print suggested fix: %w", err)
+	}
+
+	return analysis.SuggestedFix{
+		TextEdits: []analysis.TextEdit{{
+			Pos:     callExpr.Pos(),
+			End:     callExpr.End(),
+			NewText: buf.Bytes(),
+		}},
+	}, nil
 }
 
 func getGoVersion(pass *analysis.Pass) int {
