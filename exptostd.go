@@ -46,8 +46,8 @@ func NewAnalyzer() *analysis.Analyzer {
 	l := &analyzer{
 		skipGoVersionDetection: skip,
 		mapsPkgReplacements: map[string]stdReplacement{
-			"Keys":       {MinGo: go123, Text: "slices.Collect(maps.Keys())"},
-			"Values":     {MinGo: go123, Text: "slices.Collect(maps.Keys())"},
+			"Keys":       {MinGo: go123, Text: "slices.Collect(maps.Keys())", Suggested: suggestedFixForKeysOrValues},
+			"Values":     {MinGo: go123, Text: "slices.Collect(maps.Values())", Suggested: suggestedFixForKeysOrValues},
 			"Equal":      {MinGo: go121, Text: "maps.Equal()"},
 			"EqualFunc":  {MinGo: go121, Text: "maps.EqualFunc()"},
 			"Clone":      {MinGo: go121, Text: "maps.Clone()"},
@@ -240,6 +240,31 @@ func suggestedFixForClear(callExpr *ast.CallExpr) (analysis.SuggestedFix, error)
 		Fun:      ast.NewIdent("clear"),
 		Args:     callExpr.Args,
 		Ellipsis: callExpr.Ellipsis,
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	err := printer.Fprint(buf, token.NewFileSet(), s)
+	if err != nil {
+		return analysis.SuggestedFix{}, fmt.Errorf("print suggested fix: %w", err)
+	}
+
+	return analysis.SuggestedFix{
+		TextEdits: []analysis.TextEdit{{
+			Pos:     callExpr.Pos(),
+			End:     callExpr.End(),
+			NewText: buf.Bytes(),
+		}},
+	}, nil
+}
+
+func suggestedFixForKeysOrValues(callExpr *ast.CallExpr) (analysis.SuggestedFix, error) {
+	s := &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X:   &ast.Ident{Name: "slices"},
+			Sel: &ast.Ident{Name: "Collect"},
+		},
+		Args: []ast.Expr{callExpr},
 	}
 
 	buf := bytes.NewBuffer(nil)

@@ -9,7 +9,7 @@ func _(m, a map[string]string) {
 
 	maps.Keys(m) // want `golang.org/x/exp/maps.Keys\(\) can be replaced by slices.Collect\(maps.Keys\(\)\)`
 
-	maps.Values(m) // want `golang.org/x/exp/maps.Values\(\) can be replaced by slices.Collect\(maps.Keys\(\)\)`
+	maps.Values(m) // want `golang.org/x/exp/maps.Values\(\) can be replaced by slices.Collect\(maps.Values\(\)\)`
 
 	maps.Equal(m, a) // want `golang.org/x/exp/maps.Equal\(\) can be replaced by maps.Equal\(\)`
 
