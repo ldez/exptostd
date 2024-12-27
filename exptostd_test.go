@@ -20,6 +20,7 @@ func TestAnalyzer(t *testing.T) {
 		{dir: "expboth"},
 		{dir: "expnone"},
 		{dir: "expmixed"},
+		{dir: "expalias"},
 	}
 
 	for _, test := range testCases {

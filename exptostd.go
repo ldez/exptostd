@@ -164,8 +164,8 @@ func maybeReplaceImport(
 				{
 					TextEdits: []analysis.TextEdit{
 						{
-							Pos:     importSpec.Pos(),
-							End:     importSpec.End(),
+							Pos:     importSpec.Path.Pos(),
+							End:     importSpec.Path.End(),
 							NewText: []byte(replaceText),
 						},
 					},
@@ -175,11 +175,15 @@ func maybeReplaceImport(
 	}
 
 	if imp, ok := imports["golang.org/x/exp/maps"]; ok && !shouldKeepExpMaps {
-		pass.Report(diagnostic(imp, `"maps"`))
+		if imp.Name == nil || imp.Name.Name == "" {
+			pass.Report(diagnostic(imp, `"maps"`))
+		}
 	}
 
 	if imp, ok := imports["golang.org/x/exp/slices"]; ok && !shouldKeepExpSlices {
-		pass.Report(diagnostic(imp, `"slices"`))
+		if imp.Name == nil || imp.Name.Name == "" {
+			pass.Report(diagnostic(imp, `"slices"`))
+		}
 	}
 }
 
