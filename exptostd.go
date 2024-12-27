@@ -118,7 +118,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 	insp.Preorder(nodeFilter, func(n ast.Node) {
 		if importSpec, ok := n.(*ast.ImportSpec); ok {
-			cleanedPath := trimQuotes(importSpec)
+			cleanedPath := trimImportPath(importSpec)
 			imports[cleanedPath] = importSpec
 
 			return
@@ -220,7 +220,7 @@ func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]
 		return
 	}
 
-	src := trimQuotes(imp)
+	src := trimImportPath(imp)
 
 	index := strings.LastIndex(src, "/")
 
@@ -285,6 +285,6 @@ func getGoVersion(pass *analysis.Pass) int {
 	return v
 }
 
-func trimQuotes(spec *ast.ImportSpec) string {
+func trimImportPath(spec *ast.ImportSpec) string {
 	return spec.Path.Value[1 : len(spec.Path.Value)-1]
 }
