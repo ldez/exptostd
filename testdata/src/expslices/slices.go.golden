@@ -1,7 +1,7 @@
 package expslices
 
 import (
-	"golang.org/x/exp/slices" // want "Import statement can drop `golang.org/x/exp` prefix"
+	"slices" // want "Import statement can drop `golang.org/x/exp` prefix"
 )
 
 func _(a, b []string) {
@@ -59,3 +59,4 @@ func _(a, b []string) {
 		return 0
 	})
 }
+

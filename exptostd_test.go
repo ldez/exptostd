@@ -17,6 +17,9 @@ func TestAnalyzer(t *testing.T) {
 	}{
 		{dir: "expmaps"},
 		{dir: "expslices"},
+		{dir: "expboth"},
+		{dir: "expnone"},
+		{dir: "expmixed"},
 	}
 
 	for _, test := range testCases {
@@ -60,5 +63,5 @@ func run(t *testing.T, a *analysis.Analyzer, dir string, patterns ...string) []*
 		t.Fatal(err)
 	}
 
-	return analysistest.Run(t, srcPath, a, patterns...)
+	return analysistest.RunWithSuggestedFixes(t, srcPath, a, patterns...)
 }
