@@ -2,6 +2,7 @@
 package exptostd
 
 import (
+	"fmt"
 	"go/ast"
 	"go/build"
 	"go/types"
@@ -32,6 +33,8 @@ type analyzer struct {
 
 	skipGoVersionDetection bool
 	goVersion              int
+
+	importsCleaner *strings.Replacer
 }
 
 // NewAnalyzer create a new Analyzer.
@@ -39,6 +42,7 @@ func NewAnalyzer() *analysis.Analyzer {
 	_, skip := os.LookupEnv("EXPTOSTD_SKIP_GO_VERSION_CHECK")
 
 	l := &analyzer{
+		importsCleaner:         strings.NewReplacer("\"", "", "`", ""),
 		skipGoVersionDetection: skip,
 		mapsPkgReplacements: map[string]stdReplacement{
 			"Keys":       {MinGo: go123, Text: "slices.Collect(maps.Keys())"},
@@ -106,13 +110,14 @@ func (a *analyzer) run(pass *analysis.Pass) (interface{}, error) {
 	}
 
 	imports := map[string]*ast.ImportSpec{}
-	importsReplaces := strings.NewReplacer("\"", "", "`", "")
-	shouldKeepExpMaps := false
-	shouldKeepExpSlices := false
+
+	var shouldKeepExpMaps bool
+
+	var shouldKeepExpSlices bool
 
 	insp.Preorder(nodeFilter, func(n ast.Node) {
 		if importSpec, ok := n.(*ast.ImportSpec); ok {
-			cleanedPath := importsReplaces.Replace(importSpec.Path.Value)
+			cleanedPath := a.importsCleaner.Replace(importSpec.Path.Value)
 			imports[cleanedPath] = importSpec
 
 			return
@@ -144,47 +149,9 @@ func (a *analyzer) run(pass *analysis.Pass) (interface{}, error) {
 		}
 	})
 
-	maybeReplaceImport(pass, imports, shouldKeepExpMaps, shouldKeepExpSlices)
+	a.maybeRemoveImport(pass, imports, shouldKeepExpMaps, shouldKeepExpSlices)
 
 	return nil, nil
-}
-
-func maybeReplaceImport(
-	pass *analysis.Pass,
-	imports map[string]*ast.ImportSpec,
-	shouldKeepExpMaps bool,
-	shouldKeepExpSlices bool,
-) {
-	diagnostic := func(importSpec *ast.ImportSpec, replaceText string) analysis.Diagnostic {
-		return analysis.Diagnostic{
-			Pos:     importSpec.Pos(),
-			End:     importSpec.End(),
-			Message: "Import statement can drop `golang.org/x/exp` prefix",
-			SuggestedFixes: []analysis.SuggestedFix{
-				{
-					TextEdits: []analysis.TextEdit{
-						{
-							Pos:     importSpec.Path.Pos(),
-							End:     importSpec.Path.End(),
-							NewText: []byte(replaceText),
-						},
-					},
-				},
-			},
-		}
-	}
-
-	if imp, ok := imports["golang.org/x/exp/maps"]; ok && !shouldKeepExpMaps {
-		if imp.Name == nil || imp.Name.Name == "" {
-			pass.Report(diagnostic(imp, `"maps"`))
-		}
-	}
-
-	if imp, ok := imports["golang.org/x/exp/slices"]; ok && !shouldKeepExpSlices {
-		if imp.Name == nil || imp.Name.Name == "" {
-			pass.Report(diagnostic(imp, `"slices"`))
-		}
-	}
 }
 
 func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
@@ -217,6 +184,41 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	}
 
 	return false
+}
+
+func (a *analyzer) maybeRemoveImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec,
+	shouldKeepExpMaps, shouldKeepExpSlices bool,
+) {
+	a.suggestRemoveImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps")
+	a.suggestRemoveImport(pass, imports, shouldKeepExpSlices, "golang.org/x/exp/slices")
+}
+
+func (a *analyzer) suggestRemoveImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string) {
+	imp, ok := imports[importPath]
+	if !ok || shouldKeep {
+		return
+	}
+
+	// skip aliases
+	if imp.Name != nil && imp.Name.Name != "" {
+		return
+	}
+
+	src := a.importsCleaner.Replace(imp.Path.Value)
+	index := strings.LastIndex(imp.Path.Value, "/")
+
+	pass.Report(analysis.Diagnostic{
+		Pos:     imp.Pos(),
+		End:     imp.End(),
+		Message: fmt.Sprintf("Import statement '%s' can be replaced by '%s'", src, src[index:]),
+		SuggestedFixes: []analysis.SuggestedFix{{
+			TextEdits: []analysis.TextEdit{{
+				Pos:     imp.Path.Pos(),
+				End:     imp.Path.End(),
+				NewText: []byte(string(imp.Path.Value[0]) + src[index:] + string(imp.Path.Value[0])),
+			}},
+		}},
+	})
 }
 
 func getGoVersion(pass *analysis.Pass) int {
