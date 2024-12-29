@@ -61,7 +61,11 @@ linters:
 
 ### As a CLI
 
+```bash
+go install github.com/ldez/exptostd/cmd/exptostd@latest
 ```
+
+```bash
 ./exptostd ./...
 ```
 
