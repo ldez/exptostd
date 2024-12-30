@@ -152,7 +152,8 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		}
 	})
 
-	a.maybeReplaceImport(pass, imports, shouldKeepExpMaps, shouldKeepExpSlices)
+	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps")
+	a.suggestReplaceImport(pass, imports, shouldKeepExpSlices, "golang.org/x/exp/slices")
 
 	return nil, nil
 }
@@ -202,13 +203,6 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	}
 
 	return false
-}
-
-func (a *analyzer) maybeReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec,
-	shouldKeepExpMaps, shouldKeepExpSlices bool,
-) {
-	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps")
-	a.suggestReplaceImport(pass, imports, shouldKeepExpSlices, "golang.org/x/exp/slices")
 }
 
 func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string) {
