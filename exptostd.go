@@ -25,6 +25,12 @@ const (
 	goDevel = 666
 )
 
+// Result is step analysis results.
+type Result struct {
+	shouldKeepImport bool
+	Diagnostics      []analysis.Diagnostic
+}
+
 type stdReplacement struct {
 	MinGo     int
 	Text      string
@@ -114,7 +120,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 	var shouldKeepExpMaps bool
 
-	var shouldKeepExpSlices bool
+	var resultExpSlices Result
 
 	insp.Preorder(nodeFilter, func(n ast.Node) {
 		if importSpec, ok := n.(*ast.ImportSpec); ok {
@@ -143,17 +149,33 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 		switch ident.Name {
 		case "maps":
-			usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
+			diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
+			if usage {
+				pass.Report(diagnostic)
+			}
+
 			shouldKeepExpMaps = shouldKeepExpMaps || !usage
 
 		case "slices":
-			usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
-			shouldKeepExpSlices = shouldKeepExpSlices || !usage
+			diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
+
+			if usage {
+				resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
+			}
+
+			resultExpSlices.shouldKeepImport = resultExpSlices.shouldKeepImport || !usage
 		}
 	})
 
 	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps")
-	a.suggestReplaceImport(pass, imports, shouldKeepExpSlices, "golang.org/x/exp/slices")
+
+	if resultExpSlices.shouldKeepImport {
+		for _, diagnostic := range resultExpSlices.Diagnostics {
+			pass.Report(diagnostic)
+		}
+	} else {
+		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices")
+	}
 
 	return nil, nil
 }
@@ -162,47 +184,45 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	replacements map[string]stdReplacement,
 	selExpr *ast.SelectorExpr, ident *ast.Ident, callExpr *ast.CallExpr,
 	importPath string,
-) bool {
+) (analysis.Diagnostic, bool) {
 	rp, ok := replacements[selExpr.Sel.Name]
 	if !ok {
-		return false
+		return analysis.Diagnostic{}, false
 	}
 
 	if !a.skipGoVersionDetection && rp.MinGo > a.goVersion {
-		return false
+		return analysis.Diagnostic{}, false
 	}
 
 	obj := pass.TypesInfo.Uses[ident]
 	if obj == nil {
-		return false
+		return analysis.Diagnostic{}, false
 	}
 
 	pkg, ok := obj.(*types.PkgName)
 	if !ok {
-		return false
+		return analysis.Diagnostic{}, false
 	}
 
-	if pkg.Imported().Path() == importPath {
-		diagnostic := analysis.Diagnostic{
-			Pos:     callExpr.Pos(),
-			Message: fmt.Sprintf("%s.%s() can be replaced by %s", importPath, selExpr.Sel.Name, rp.Text),
-		}
-
-		if rp.Suggested != nil {
-			fix, err := rp.Suggested(callExpr)
-			if err != nil {
-				diagnostic.Message = fmt.Sprintf("Suggested fix error: %v", err)
-			} else {
-				diagnostic.SuggestedFixes = append(diagnostic.SuggestedFixes, fix)
-			}
-		}
-
-		pass.Report(diagnostic)
-
-		return true
+	if pkg.Imported().Path() != importPath {
+		return analysis.Diagnostic{}, false
 	}
 
-	return false
+	diagnostic := analysis.Diagnostic{
+		Pos:     callExpr.Pos(),
+		Message: fmt.Sprintf("%s.%s() can be replaced by %s", importPath, selExpr.Sel.Name, rp.Text),
+	}
+
+	if rp.Suggested != nil {
+		fix, err := rp.Suggested(callExpr)
+		if err != nil {
+			diagnostic.Message = fmt.Sprintf("Suggested fix error: %v", err)
+		} else {
+			diagnostic.SuggestedFixes = append(diagnostic.SuggestedFixes, fix)
+		}
+	}
+
+	return diagnostic, true
 }
 
 func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string) {

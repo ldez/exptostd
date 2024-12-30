@@ -8,6 +8,5 @@ import (
 
 func _(m map[string]string, a, b []string) {
 	maps.Clone(m)
-	slices.Equal(a, b) // want `golang.org/x/exp/slices\.Equal\(\) can be replaced by slices\.Equal\(\)`
+	slices.Equal(a, b)
 }
-
