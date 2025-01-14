@@ -1,0 +1,28 @@
+package expconstraints
+
+import (
+	"time"
+	"cmp" // want "Import statement 'golang.org/x/exp/constraints' can be replaced by 'cmp'"
+)
+
+type _[T cmp.Ordered] []T // want `golang.org/x/exp/constraints\.Ordered can be replaced by cmp\.Ordered`
+
+type _ interface {
+	cmp.Ordered | time.Time // want `golang.org/x/exp/constraints\.Ordered can be replaced by cmp\.Ordered`
+}
+
+type _ interface {
+	cmp.Ordered // want `golang.org/x/exp/constraints\.Ordered can be replaced by cmp\.Ordered`
+	comparable
+}
+
+type _[K cmp.Ordered, V any] struct { // want `golang.org/x/exp/constraints\.Ordered can be replaced by cmp\.Ordered`
+}
+
+func _[T cmp.Ordered](_ []T) bool { // want `golang.org/x/exp/constraints\.Ordered can be replaced by cmp\.Ordered`
+	return true
+}
+
+func _[S []E, E cmp.Ordered](s S) E { // want `golang.org/x/exp/constraints\.Ordered can be replaced by cmp\.Ordered`
+	return s[len(s)-1]
+}
