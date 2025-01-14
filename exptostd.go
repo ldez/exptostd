@@ -167,14 +167,14 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		}
 	})
 
-	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps")
+	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps", "maps")
 
 	if resultExpSlices.shouldKeepImport {
 		for _, diagnostic := range resultExpSlices.Diagnostics {
 			pass.Report(diagnostic)
 		}
 	} else {
-		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices")
+		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices", "slices")
 	}
 
 	return nil, nil
@@ -225,7 +225,7 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	return diagnostic, true
 }
 
-func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string) {
+func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string, stdPackage string) {
 	imp, ok := imports[importPath]
 	if !ok || shouldKeep {
 		return
@@ -233,17 +233,15 @@ func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]
 
 	src := trimImportPath(imp)
 
-	index := strings.LastIndex(src, "/")
-
 	pass.Report(analysis.Diagnostic{
 		Pos:     imp.Pos(),
 		End:     imp.End(),
-		Message: fmt.Sprintf("Import statement '%s' can be replaced by '%s'", src, src[index+1:]),
+		Message: fmt.Sprintf("Import statement '%s' can be replaced by '%s'", src, stdPackage),
 		SuggestedFixes: []analysis.SuggestedFix{{
 			TextEdits: []analysis.TextEdit{{
 				Pos:     imp.Path.Pos(),
 				End:     imp.Path.End(),
-				NewText: []byte(string(imp.Path.Value[0]) + src[index+1:] + string(imp.Path.Value[0])),
+				NewText: []byte(string(imp.Path.Value[0]) + stdPackage + string(imp.Path.Value[0])),
 			}},
 		}},
 	})
