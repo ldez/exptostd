@@ -37,12 +37,19 @@ type stdReplacement struct {
 	Suggested func(callExpr *ast.CallExpr) (analysis.SuggestedFix, error)
 }
 
+type selectorReplacement struct {
+	MinGo     int
+	Text      string
+	Suggested func(callExpr *ast.SelectorExpr) (analysis.SuggestedFix, error)
+}
+
 type analyzer struct {
 	mapsPkgReplacements   map[string]stdReplacement
 	slicesPkgReplacements map[string]stdReplacement
 
-	constraintsDiagnostics   []analysis.Diagnostic
-	shouldKeepExpConstraints bool
+	constraintsPkgReplacements map[string]selectorReplacement
+	constraintsDiagnostics     []analysis.Diagnostic
+	shouldKeepExpConstraints   bool
 
 	skipGoVersionDetection bool
 	goVersion              int
@@ -96,6 +103,9 @@ func NewAnalyzer() *analysis.Analyzer {
 			"BinarySearch":     {MinGo: go121, Text: "slices.BinarySearch()"},
 			"BinarySearchFunc": {MinGo: go121, Text: "slices.BinarySearchFunc()"},
 		},
+		constraintsPkgReplacements: map[string]selectorReplacement{
+			"Ordered": {MinGo: go121, Text: "cmp.Ordered", Suggested: suggestedFixForConstraintsOrder},
+		},
 	}
 
 	return &analysis.Analyzer{
@@ -116,6 +126,8 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 	nodeFilter := []ast.Node{
 		(*ast.CallExpr)(nil),
+		(*ast.FuncDecl)(nil),
+		(*ast.TypeSpec)(nil),
 		(*ast.ImportSpec)(nil),
 	}
 
@@ -168,6 +180,47 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 				resultExpSlices.shouldKeepImport = resultExpSlices.shouldKeepImport || !usage
 			}
+
+		case *ast.FuncDecl:
+			funcDecl := n
+
+			if funcDecl.Type.TypeParams != nil {
+				for _, field := range funcDecl.Type.TypeParams.List {
+					if selExpr, ok := field.Type.(*ast.SelectorExpr); ok {
+						a.detectConstraintsUsage(pass, selExpr)
+					}
+				}
+			}
+
+		case *ast.TypeSpec:
+			typeSpec := n
+
+			if typeSpec.TypeParams != nil {
+				for _, fieldType := range typeSpec.TypeParams.List {
+					if selExpr, ok := fieldType.Type.(*ast.SelectorExpr); ok {
+						a.detectConstraintsUsage(pass, selExpr)
+					}
+				}
+			}
+
+			switch foundType := typeSpec.Type.(type) {
+			case *ast.InterfaceType:
+				for _, method := range foundType.Methods.List {
+					switch found := method.Type.(type) {
+					case *ast.BinaryExpr:
+						if selExpr, ok := found.X.(*ast.SelectorExpr); ok {
+							a.detectConstraintsUsage(pass, selExpr)
+						}
+
+						if selExpr, ok := found.Y.(*ast.SelectorExpr); ok {
+							a.detectConstraintsUsage(pass, selExpr)
+						}
+
+					case *ast.SelectorExpr:
+						a.detectConstraintsUsage(pass, found)
+					}
+				}
+			}
 		}
 	})
 
@@ -179,6 +232,14 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		}
 	} else {
 		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices", "slices")
+	}
+
+	if !a.shouldKeepExpConstraints && len(a.constraintsDiagnostics) > 0 {
+		for _, diagnostic := range a.constraintsDiagnostics {
+			pass.Report(diagnostic)
+		}
+
+		a.suggestReplaceImport(pass, imports, a.shouldKeepExpConstraints, "golang.org/x/exp/constraints", "cmp")
 	}
 
 	return nil, nil
@@ -294,6 +355,76 @@ func suggestedFixForKeysOrValues(callExpr *ast.CallExpr) (analysis.SuggestedFix,
 		TextEdits: []analysis.TextEdit{{
 			Pos:     callExpr.Pos(),
 			End:     callExpr.End(),
+			NewText: buf.Bytes(),
+		}},
+	}, nil
+}
+
+func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, selExpr *ast.SelectorExpr) {
+	ident, ok := selExpr.X.(*ast.Ident)
+	if !ok {
+		return
+	}
+
+	obj := pass.TypesInfo.Uses[ident]
+	if obj == nil {
+		return
+	}
+
+	pkg, ok := obj.(*types.PkgName)
+	if !ok {
+		return
+	}
+
+	if pkg.Imported().Path() != "golang.org/x/exp/constraints" {
+		return
+	}
+
+	rp, ok := a.constraintsPkgReplacements[selExpr.Sel.Name]
+	if !ok {
+		a.shouldKeepExpConstraints = true
+		return
+	}
+
+	if rp.MinGo > a.goVersion {
+		a.shouldKeepExpConstraints = true
+		return
+	}
+
+	diagnostic := analysis.Diagnostic{
+		Pos:     selExpr.Pos(),
+		Message: "golang.org/x/exp/constraints.Ordered can be replaced by cmp.Ordered",
+	}
+
+	if rp.Suggested != nil {
+		fix, err := rp.Suggested(selExpr)
+		if err != nil {
+			diagnostic.Message = fmt.Sprintf("Suggested fix error: %v", err)
+		} else {
+			diagnostic.SuggestedFixes = append(diagnostic.SuggestedFixes, fix)
+		}
+	}
+
+	a.constraintsDiagnostics = append(a.constraintsDiagnostics, diagnostic)
+}
+
+func suggestedFixForConstraintsOrder(selExpr *ast.SelectorExpr) (analysis.SuggestedFix, error) {
+	s := &ast.SelectorExpr{
+		X:   &ast.Ident{Name: "cmp"},
+		Sel: &ast.Ident{Name: "Ordered"},
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	err := printer.Fprint(buf, token.NewFileSet(), s)
+	if err != nil {
+		return analysis.SuggestedFix{}, fmt.Errorf("print suggested fix: %w", err)
+	}
+
+	return analysis.SuggestedFix{
+		TextEdits: []analysis.TextEdit{{
+			Pos:     selExpr.Pos(),
+			End:     selExpr.End(),
 			NewText: buf.Bytes(),
 		}},
 	}, nil
