@@ -174,24 +174,14 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		case *ast.FuncDecl:
 			if node.Type.TypeParams != nil {
 				for _, field := range node.Type.TypeParams.List {
-					selExpr, ok := field.Type.(*ast.SelectorExpr)
-					if !ok {
-						continue
-					}
-
-					a.detectConstraintsUsage(pass, selExpr)
+					a.detectConstraintsUsage(pass, field.Type)
 				}
 			}
 
 		case *ast.TypeSpec:
 			if node.TypeParams != nil {
 				for _, field := range node.TypeParams.List {
-					selExpr, ok := field.Type.(*ast.SelectorExpr)
-					if !ok {
-						continue
-					}
-
-					a.detectConstraintsUsage(pass, selExpr)
+					a.detectConstraintsUsage(pass, field.Type)
 				}
 			}
 
@@ -201,24 +191,13 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 			}
 
 			for _, method := range interfaceType.Methods.List {
-				switch found := method.Type.(type) {
+				switch exp := method.Type.(type) {
 				case *ast.BinaryExpr:
-					selExpr, ok := found.X.(*ast.SelectorExpr)
-					if !ok {
-						continue
-					}
-
-					a.detectConstraintsUsage(pass, selExpr)
-
-					selExpr, ok = found.Y.(*ast.SelectorExpr)
-					if !ok {
-						continue
-					}
-
-					a.detectConstraintsUsage(pass, selExpr)
+					a.detectConstraintsUsage(pass, exp.X)
+					a.detectConstraintsUsage(pass, exp.Y)
 
 				case *ast.SelectorExpr:
-					a.detectConstraintsUsage(pass, found)
+					a.detectConstraintsUsage(pass, exp)
 				}
 			}
 		}
@@ -290,7 +269,12 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	return diagnostic, true
 }
 
-func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, selExpr *ast.SelectorExpr) {
+func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr) {
+	selExpr, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return
+	}
+
 	ident, ok := selExpr.X.(*ast.Ident)
 	if !ok {
 		return
