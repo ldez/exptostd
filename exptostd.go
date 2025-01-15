@@ -132,21 +132,17 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	var resultExpSlices Result
 
 	insp.Preorder(nodeFilter, func(n ast.Node) {
-		switch n := n.(type) {
+		switch node := n.(type) {
 		case *ast.ImportSpec:
-			importSpec := n
-
 			// skip aliases
-			if importSpec.Name == nil || importSpec.Name.Name == "" {
-				imports[trimImportPath(importSpec)] = importSpec
+			if node.Name == nil || node.Name.Name == "" {
+				imports[trimImportPath(node)] = node
 			}
 
 			return
 
 		case *ast.CallExpr:
-			callExpr := n
-
-			selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+			selExpr, ok := node.Fun.(*ast.SelectorExpr)
 			if !ok {
 				return
 			}
@@ -158,7 +154,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 			switch ident.Name {
 			case "maps":
-				diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
+				diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, node, "golang.org/x/exp/maps")
 				if usage {
 					pass.Report(diagnostic)
 				}
@@ -166,7 +162,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 				shouldKeepExpMaps = shouldKeepExpMaps || !usage
 
 			case "slices":
-				diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
+				diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, node, "golang.org/x/exp/slices")
 
 				if usage {
 					resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
@@ -176,10 +172,8 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 			}
 
 		case *ast.FuncDecl:
-			funcDecl := n
-
-			if funcDecl.Type.TypeParams != nil {
-				for _, field := range funcDecl.Type.TypeParams.List {
+			if node.Type.TypeParams != nil {
+				for _, field := range node.Type.TypeParams.List {
 					if selExpr, ok := field.Type.(*ast.SelectorExpr); ok {
 						a.detectConstraintsUsage(pass, selExpr)
 					}
@@ -187,17 +181,15 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 			}
 
 		case *ast.TypeSpec:
-			typeSpec := n
-
-			if typeSpec.TypeParams != nil {
-				for _, fieldType := range typeSpec.TypeParams.List {
+			if node.TypeParams != nil {
+				for _, fieldType := range node.TypeParams.List {
 					if selExpr, ok := fieldType.Type.(*ast.SelectorExpr); ok {
 						a.detectConstraintsUsage(pass, selExpr)
 					}
 				}
 			}
 
-			switch foundType := typeSpec.Type.(type) {
+			switch foundType := node.Type.(type) {
 			case *ast.InterfaceType:
 				for _, method := range foundType.Methods.List {
 					switch found := method.Type.(type) {
