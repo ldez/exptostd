@@ -330,7 +330,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, selExpr *ast.Sele
 	a.constraintsDiagnostics = append(a.constraintsDiagnostics, diagnostic)
 }
 
-func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string, stdPackage string) {
+func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath, stdPackage string) {
 	imp, ok := imports[importPath]
 	if !ok || shouldKeep {
 		return
