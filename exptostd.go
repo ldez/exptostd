@@ -38,12 +38,9 @@ type stdReplacement[T ast.Expr] struct {
 }
 
 type analyzer struct {
-	mapsPkgReplacements   map[string]stdReplacement[*ast.CallExpr]
-	slicesPkgReplacements map[string]stdReplacement[*ast.CallExpr]
-
+	mapsPkgReplacements        map[string]stdReplacement[*ast.CallExpr]
+	slicesPkgReplacements      map[string]stdReplacement[*ast.CallExpr]
 	constraintsPkgReplacements map[string]stdReplacement[*ast.SelectorExpr]
-	constraintsDiagnostics     []analysis.Diagnostic
-	shouldKeepExpConstraints   bool
 
 	skipGoVersionDetection bool
 	goVersion              int
@@ -110,6 +107,7 @@ func NewAnalyzer() *analysis.Analyzer {
 	}
 }
 
+//nolint:gocognit,gocyclo // The complexity is expected by the cases to handle.
 func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	insp, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	if !ok {
@@ -130,6 +128,8 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	var shouldKeepExpMaps bool
 
 	var resultExpSlices Result
+
+	resultExpConstraints := &Result{}
 
 	insp.Preorder(nodeFilter, func(n ast.Node) {
 		switch node := n.(type) {
@@ -173,14 +173,14 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		case *ast.FuncDecl:
 			if node.Type.TypeParams != nil {
 				for _, field := range node.Type.TypeParams.List {
-					a.detectConstraintsUsage(pass, field.Type)
+					a.detectConstraintsUsage(pass, field.Type, resultExpConstraints)
 				}
 			}
 
 		case *ast.TypeSpec:
 			if node.TypeParams != nil {
 				for _, field := range node.TypeParams.List {
-					a.detectConstraintsUsage(pass, field.Type)
+					a.detectConstraintsUsage(pass, field.Type, resultExpConstraints)
 				}
 			}
 
@@ -192,18 +192,20 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 			for _, method := range interfaceType.Methods.List {
 				switch exp := method.Type.(type) {
 				case *ast.BinaryExpr:
-					a.detectConstraintsUsage(pass, exp.X)
-					a.detectConstraintsUsage(pass, exp.Y)
+					a.detectConstraintsUsage(pass, exp.X, resultExpConstraints)
+					a.detectConstraintsUsage(pass, exp.Y, resultExpConstraints)
 
 				case *ast.SelectorExpr:
-					a.detectConstraintsUsage(pass, exp)
+					a.detectConstraintsUsage(pass, exp, resultExpConstraints)
 				}
 			}
 		}
 	})
 
+	// maps
 	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps", "maps")
 
+	// slices
 	if resultExpSlices.shouldKeepImport {
 		for _, diagnostic := range resultExpSlices.Diagnostics {
 			pass.Report(diagnostic)
@@ -212,13 +214,12 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices", "slices")
 	}
 
-	if !a.shouldKeepExpConstraints && len(a.constraintsDiagnostics) > 0 {
-		for _, diagnostic := range a.constraintsDiagnostics {
-			pass.Report(diagnostic)
-		}
-
-		a.suggestReplaceImport(pass, imports, a.shouldKeepExpConstraints, "golang.org/x/exp/constraints", "cmp")
+	// constraints
+	for _, diagnostic := range resultExpConstraints.Diagnostics {
+		pass.Report(diagnostic)
 	}
+
+	a.suggestReplaceImport(pass, imports, resultExpConstraints.shouldKeepImport, "golang.org/x/exp/constraints", "cmp")
 
 	return nil, nil
 }
@@ -268,7 +269,7 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	return diagnostic, true
 }
 
-func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr) {
+func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr, result *Result) {
 	selExpr, ok := expr.(*ast.SelectorExpr)
 	if !ok {
 		return
@@ -295,12 +296,12 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr) {
 
 	rp, ok := a.constraintsPkgReplacements[selExpr.Sel.Name]
 	if !ok {
-		a.shouldKeepExpConstraints = true
+		result.shouldKeepImport = true
 		return
 	}
 
 	if !a.skipGoVersionDetection && rp.MinGo > a.goVersion {
-		a.shouldKeepExpConstraints = true
+		result.shouldKeepImport = true
 		return
 	}
 
@@ -318,7 +319,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr) {
 		}
 	}
 
-	a.constraintsDiagnostics = append(a.constraintsDiagnostics, diagnostic)
+	result.Diagnostics = append(result.Diagnostics, diagnostic)
 }
 
 func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath, stdPackage string) {
