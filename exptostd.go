@@ -174,18 +174,24 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		case *ast.FuncDecl:
 			if node.Type.TypeParams != nil {
 				for _, field := range node.Type.TypeParams.List {
-					if selExpr, ok := field.Type.(*ast.SelectorExpr); ok {
-						a.detectConstraintsUsage(pass, selExpr)
+					selExpr, ok := field.Type.(*ast.SelectorExpr)
+					if !ok {
+						continue
 					}
+
+					a.detectConstraintsUsage(pass, selExpr)
 				}
 			}
 
 		case *ast.TypeSpec:
 			if node.TypeParams != nil {
 				for _, fieldType := range node.TypeParams.List {
-					if selExpr, ok := fieldType.Type.(*ast.SelectorExpr); ok {
-						a.detectConstraintsUsage(pass, selExpr)
+					selExpr, ok := fieldType.Type.(*ast.SelectorExpr)
+					if !ok {
+						continue
 					}
+
+					a.detectConstraintsUsage(pass, selExpr)
 				}
 			}
 
