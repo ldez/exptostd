@@ -5,5 +5,5 @@ import (
 )
 
 type _ interface {
-	constraints.Ordered | constraints.Float
+	constraints.Ordered | constraints.Float // want "golang.org/x/exp/constraints.Ordered can be replaced by cmp.Ordered"
 }
