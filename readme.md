@@ -6,7 +6,7 @@ Detects functions from golang.org/x/exp/ that can be replaced by std functions.
 
 Actual detections:
 
-- [`golang.org/x/exp/maps`](https://pkg.go.dev/golang.org/x/exp/maps) to [`maps`](https://pkg.go.dev/maps) package:
+- `golang.org/x/exp/maps`:
   - `Keys`
   - `Values`
   - `Equal`
@@ -16,7 +16,7 @@ Actual detections:
   - `DeleteFunc`
   - `Clear`
 
-- [`golang.org/x/exp/slices`](https://pkg.go.dev/golang.org/x/exp/slices) to [`slices`](https://pkg.go.dev/slices) package:
+- `golang.org/x/exp/slices`:
   - `Equal`
   - `EqualFunc`
   - `Compare`
@@ -47,7 +47,7 @@ Actual detections:
   - `BinarySearch`
   - `BinarySearchFunc`
 
-- [`golang.org/x/exp/constraints`](https://pkg.go.dev/golang.org/x/exp/constraints) to [`cmp`](https://pkg.go.dev/cmp) package:
+- `golang.org/x/exp/constraints`:
   - `Ordered`
 
 ## Usages
