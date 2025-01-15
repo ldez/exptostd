@@ -20,6 +20,18 @@ import (
 )
 
 const (
+	pkgExpMaps        = "golang.org/x/exp/maps"
+	pkgExpSlices      = "golang.org/x/exp/slices"
+	pkgExpConstraints = "golang.org/x/exp/constraints"
+)
+
+const (
+	pkgMaps   = "maps"
+	pkgSlices = "slices"
+	pkgComp   = "cmp"
+)
+
+const (
 	go123   = 123
 	go121   = 121
 	goDevel = 666
@@ -153,16 +165,16 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 			}
 
 			switch ident.Name {
-			case "maps":
-				diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, node, "golang.org/x/exp/maps")
+			case pkgMaps:
+				diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, node, pkgExpMaps)
 				if usage {
 					pass.Report(diagnostic)
 				}
 
 				shouldKeepExpMaps = shouldKeepExpMaps || !usage
 
-			case "slices":
-				diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, node, "golang.org/x/exp/slices")
+			case pkgSlices:
+				diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, node, pkgExpSlices)
 				if usage {
 					resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
 				}
@@ -203,7 +215,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	})
 
 	// maps
-	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps", "maps")
+	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, pkgExpMaps, pkgMaps)
 
 	// slices
 	if resultExpSlices.shouldKeepImport {
@@ -211,7 +223,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 			pass.Report(diagnostic)
 		}
 	} else {
-		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices", "slices")
+		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, pkgExpSlices, pkgSlices)
 	}
 
 	// constraints
@@ -219,7 +231,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 		pass.Report(diagnostic)
 	}
 
-	a.suggestReplaceImport(pass, imports, resultExpConstraints.shouldKeepImport, "golang.org/x/exp/constraints", "cmp")
+	a.suggestReplaceImport(pass, imports, resultExpConstraints.shouldKeepImport, pkgExpConstraints, pkgComp)
 
 	return nil, nil
 }
@@ -290,7 +302,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr, re
 		return
 	}
 
-	if pkg.Imported().Path() != "golang.org/x/exp/constraints" {
+	if pkg.Imported().Path() != pkgExpConstraints {
 		return
 	}
 
@@ -307,7 +319,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr, re
 
 	diagnostic := analysis.Diagnostic{
 		Pos:     selExpr.Pos(),
-		Message: fmt.Sprintf("golang.org/x/exp/constraints.%s can be replaced by %s", selExpr.Sel.Name, rp.Text),
+		Message: fmt.Sprintf("%s.%s can be replaced by %s", pkgExpConstraints, selExpr.Sel.Name, rp.Text),
 	}
 
 	if rp.Suggested != nil {
@@ -370,7 +382,7 @@ func suggestedFixForClear(callExpr *ast.CallExpr) (analysis.SuggestedFix, error)
 func suggestedFixForKeysOrValues(callExpr *ast.CallExpr) (analysis.SuggestedFix, error) {
 	s := &ast.CallExpr{
 		Fun: &ast.SelectorExpr{
-			X:   &ast.Ident{Name: "slices"},
+			X:   &ast.Ident{Name: pkgSlices},
 			Sel: &ast.Ident{Name: "Collect"},
 		},
 		Args: []ast.Expr{callExpr},
@@ -394,7 +406,7 @@ func suggestedFixForKeysOrValues(callExpr *ast.CallExpr) (analysis.SuggestedFix,
 
 func suggestedFixForConstraintsOrder(selExpr *ast.SelectorExpr) (analysis.SuggestedFix, error) {
 	s := &ast.SelectorExpr{
-		X:   &ast.Ident{Name: "cmp"},
+		X:   &ast.Ident{Name: pkgComp},
 		Sel: &ast.Ident{Name: "Ordered"},
 	}
 
