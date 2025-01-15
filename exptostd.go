@@ -185,8 +185,8 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 		case *ast.TypeSpec:
 			if node.TypeParams != nil {
-				for _, fieldType := range node.TypeParams.List {
-					selExpr, ok := fieldType.Type.(*ast.SelectorExpr)
+				for _, field := range node.TypeParams.List {
+					selExpr, ok := field.Type.(*ast.SelectorExpr)
 					if !ok {
 						continue
 					}
@@ -195,22 +195,30 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 				}
 			}
 
-			switch foundType := node.Type.(type) {
-			case *ast.InterfaceType:
-				for _, method := range foundType.Methods.List {
-					switch found := method.Type.(type) {
-					case *ast.BinaryExpr:
-						if selExpr, ok := found.X.(*ast.SelectorExpr); ok {
-							a.detectConstraintsUsage(pass, selExpr)
-						}
+			interfaceType, ok := node.Type.(*ast.InterfaceType)
+			if !ok {
+				return
+			}
 
-						if selExpr, ok := found.Y.(*ast.SelectorExpr); ok {
-							a.detectConstraintsUsage(pass, selExpr)
-						}
-
-					case *ast.SelectorExpr:
-						a.detectConstraintsUsage(pass, found)
+			for _, method := range interfaceType.Methods.List {
+				switch found := method.Type.(type) {
+				case *ast.BinaryExpr:
+					selExpr, ok := found.X.(*ast.SelectorExpr)
+					if !ok {
+						continue
 					}
+
+					a.detectConstraintsUsage(pass, selExpr)
+
+					selExpr, ok = found.Y.(*ast.SelectorExpr)
+					if !ok {
+						continue
+					}
+
+					a.detectConstraintsUsage(pass, selExpr)
+
+				case *ast.SelectorExpr:
+					a.detectConstraintsUsage(pass, found)
 				}
 			}
 		}
