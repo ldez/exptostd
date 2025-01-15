@@ -31,15 +31,16 @@ type Result struct {
 	Diagnostics      []analysis.Diagnostic
 }
 
-type stdReplacement struct {
+type stdReplacement[T ast.Expr] struct {
 	MinGo     int
 	Text      string
-	Suggested func(callExpr *ast.CallExpr) (analysis.SuggestedFix, error)
+	Suggested func(callExpr T) (analysis.SuggestedFix, error)
 }
 
 type analyzer struct {
-	mapsPkgReplacements   map[string]stdReplacement
-	slicesPkgReplacements map[string]stdReplacement
+	mapsPkgReplacements        map[string]stdReplacement[*ast.CallExpr]
+	slicesPkgReplacements      map[string]stdReplacement[*ast.CallExpr]
+	constraintsPkgReplacements map[string]stdReplacement[*ast.SelectorExpr]
 
 	skipGoVersionDetection bool
 	goVersion              int
@@ -51,7 +52,7 @@ func NewAnalyzer() *analysis.Analyzer {
 
 	l := &analyzer{
 		skipGoVersionDetection: skip,
-		mapsPkgReplacements: map[string]stdReplacement{
+		mapsPkgReplacements: map[string]stdReplacement[*ast.CallExpr]{
 			"Keys":       {MinGo: go123, Text: "slices.Collect(maps.Keys())", Suggested: suggestedFixForKeysOrValues},
 			"Values":     {MinGo: go123, Text: "slices.Collect(maps.Values())", Suggested: suggestedFixForKeysOrValues},
 			"Equal":      {MinGo: go121, Text: "maps.Equal()"},
@@ -61,7 +62,7 @@ func NewAnalyzer() *analysis.Analyzer {
 			"DeleteFunc": {MinGo: go121, Text: "maps.DeleteFunc()"},
 			"Clear":      {MinGo: go121, Text: "clear()", Suggested: suggestedFixForClear},
 		},
-		slicesPkgReplacements: map[string]stdReplacement{
+		slicesPkgReplacements: map[string]stdReplacement[*ast.CallExpr]{
 			"Equal":        {MinGo: go121, Text: "slices.Equal()"},
 			"EqualFunc":    {MinGo: go121, Text: "slices.EqualFunc()"},
 			"Compare":      {MinGo: go121, Text: "slices.Compare()"},
@@ -93,6 +94,9 @@ func NewAnalyzer() *analysis.Analyzer {
 			"BinarySearch":     {MinGo: go121, Text: "slices.BinarySearch()"},
 			"BinarySearchFunc": {MinGo: go121, Text: "slices.BinarySearchFunc()"},
 		},
+		constraintsPkgReplacements: map[string]stdReplacement[*ast.SelectorExpr]{
+			"Ordered": {MinGo: go121, Text: "cmp.Ordered", Suggested: suggestedFixForConstraintsOrder},
+		},
 	}
 
 	return &analysis.Analyzer{
@@ -103,6 +107,7 @@ func NewAnalyzer() *analysis.Analyzer {
 	}
 }
 
+//nolint:gocognit,gocyclo // The complexity is expected by the cases to handle.
 func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	insp, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	if !ok {
@@ -113,6 +118,8 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 	nodeFilter := []ast.Node{
 		(*ast.CallExpr)(nil),
+		(*ast.FuncDecl)(nil),
+		(*ast.TypeSpec)(nil),
 		(*ast.ImportSpec)(nil),
 	}
 
@@ -122,66 +129,103 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 	var resultExpSlices Result
 
+	resultExpConstraints := &Result{}
+
 	insp.Preorder(nodeFilter, func(n ast.Node) {
-		if importSpec, ok := n.(*ast.ImportSpec); ok {
+		switch node := n.(type) {
+		case *ast.ImportSpec:
 			// skip aliases
-			if importSpec.Name == nil || importSpec.Name.Name == "" {
-				imports[trimImportPath(importSpec)] = importSpec
+			if node.Name == nil || node.Name.Name == "" {
+				imports[trimImportPath(node)] = node
 			}
 
 			return
-		}
 
-		callExpr, ok := n.(*ast.CallExpr)
-		if !ok {
-			return
-		}
-
-		selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return
-		}
-
-		ident, ok := selExpr.X.(*ast.Ident)
-		if !ok {
-			return
-		}
-
-		switch ident.Name {
-		case "maps":
-			diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
-			if usage {
-				pass.Report(diagnostic)
+		case *ast.CallExpr:
+			selExpr, ok := node.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return
 			}
 
-			shouldKeepExpMaps = shouldKeepExpMaps || !usage
-
-		case "slices":
-			diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
-
-			if usage {
-				resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
+			ident, ok := selExpr.X.(*ast.Ident)
+			if !ok {
+				return
 			}
 
-			resultExpSlices.shouldKeepImport = resultExpSlices.shouldKeepImport || !usage
+			switch ident.Name {
+			case "maps":
+				diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, node, "golang.org/x/exp/maps")
+				if usage {
+					pass.Report(diagnostic)
+				}
+
+				shouldKeepExpMaps = shouldKeepExpMaps || !usage
+
+			case "slices":
+				diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, node, "golang.org/x/exp/slices")
+				if usage {
+					resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
+				}
+
+				resultExpSlices.shouldKeepImport = resultExpSlices.shouldKeepImport || !usage
+			}
+
+		case *ast.FuncDecl:
+			if node.Type.TypeParams != nil {
+				for _, field := range node.Type.TypeParams.List {
+					a.detectConstraintsUsage(pass, field.Type, resultExpConstraints)
+				}
+			}
+
+		case *ast.TypeSpec:
+			if node.TypeParams != nil {
+				for _, field := range node.TypeParams.List {
+					a.detectConstraintsUsage(pass, field.Type, resultExpConstraints)
+				}
+			}
+
+			interfaceType, ok := node.Type.(*ast.InterfaceType)
+			if !ok {
+				return
+			}
+
+			for _, method := range interfaceType.Methods.List {
+				switch exp := method.Type.(type) {
+				case *ast.BinaryExpr:
+					a.detectConstraintsUsage(pass, exp.X, resultExpConstraints)
+					a.detectConstraintsUsage(pass, exp.Y, resultExpConstraints)
+
+				case *ast.SelectorExpr:
+					a.detectConstraintsUsage(pass, exp, resultExpConstraints)
+				}
+			}
 		}
 	})
 
-	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps")
+	// maps
+	a.suggestReplaceImport(pass, imports, shouldKeepExpMaps, "golang.org/x/exp/maps", "maps")
 
+	// slices
 	if resultExpSlices.shouldKeepImport {
 		for _, diagnostic := range resultExpSlices.Diagnostics {
 			pass.Report(diagnostic)
 		}
 	} else {
-		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices")
+		a.suggestReplaceImport(pass, imports, resultExpSlices.shouldKeepImport, "golang.org/x/exp/slices", "slices")
 	}
+
+	// constraints
+	for _, diagnostic := range resultExpConstraints.Diagnostics {
+		pass.Report(diagnostic)
+	}
+
+	a.suggestReplaceImport(pass, imports, resultExpConstraints.shouldKeepImport, "golang.org/x/exp/constraints", "cmp")
 
 	return nil, nil
 }
 
 func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
-	replacements map[string]stdReplacement,
+	replacements map[string]stdReplacement[*ast.CallExpr],
 	selExpr *ast.SelectorExpr, ident *ast.Ident, callExpr *ast.CallExpr,
 	importPath string,
 ) (analysis.Diagnostic, bool) {
@@ -225,7 +269,60 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	return diagnostic, true
 }
 
-func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string) {
+func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr, result *Result) {
+	selExpr, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return
+	}
+
+	ident, ok := selExpr.X.(*ast.Ident)
+	if !ok {
+		return
+	}
+
+	obj := pass.TypesInfo.Uses[ident]
+	if obj == nil {
+		return
+	}
+
+	pkg, ok := obj.(*types.PkgName)
+	if !ok {
+		return
+	}
+
+	if pkg.Imported().Path() != "golang.org/x/exp/constraints" {
+		return
+	}
+
+	rp, ok := a.constraintsPkgReplacements[selExpr.Sel.Name]
+	if !ok {
+		result.shouldKeepImport = true
+		return
+	}
+
+	if !a.skipGoVersionDetection && rp.MinGo > a.goVersion {
+		result.shouldKeepImport = true
+		return
+	}
+
+	diagnostic := analysis.Diagnostic{
+		Pos:     selExpr.Pos(),
+		Message: fmt.Sprintf("golang.org/x/exp/constraints.%s can be replaced by %s", selExpr.Sel.Name, rp.Text),
+	}
+
+	if rp.Suggested != nil {
+		fix, err := rp.Suggested(selExpr)
+		if err != nil {
+			diagnostic.Message = fmt.Sprintf("Suggested fix error: %v", err)
+		} else {
+			diagnostic.SuggestedFixes = append(diagnostic.SuggestedFixes, fix)
+		}
+	}
+
+	result.Diagnostics = append(result.Diagnostics, diagnostic)
+}
+
+func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath, stdPackage string) {
 	imp, ok := imports[importPath]
 	if !ok || shouldKeep {
 		return
@@ -233,17 +330,15 @@ func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]
 
 	src := trimImportPath(imp)
 
-	index := strings.LastIndex(src, "/")
-
 	pass.Report(analysis.Diagnostic{
 		Pos:     imp.Pos(),
 		End:     imp.End(),
-		Message: fmt.Sprintf("Import statement '%s' can be replaced by '%s'", src, src[index+1:]),
+		Message: fmt.Sprintf("Import statement '%s' can be replaced by '%s'", src, stdPackage),
 		SuggestedFixes: []analysis.SuggestedFix{{
 			TextEdits: []analysis.TextEdit{{
 				Pos:     imp.Path.Pos(),
 				End:     imp.Path.End(),
-				NewText: []byte(string(imp.Path.Value[0]) + src[index+1:] + string(imp.Path.Value[0])),
+				NewText: []byte(string(imp.Path.Value[0]) + stdPackage + string(imp.Path.Value[0])),
 			}},
 		}},
 	})
@@ -292,6 +387,28 @@ func suggestedFixForKeysOrValues(callExpr *ast.CallExpr) (analysis.SuggestedFix,
 		TextEdits: []analysis.TextEdit{{
 			Pos:     callExpr.Pos(),
 			End:     callExpr.End(),
+			NewText: buf.Bytes(),
+		}},
+	}, nil
+}
+
+func suggestedFixForConstraintsOrder(selExpr *ast.SelectorExpr) (analysis.SuggestedFix, error) {
+	s := &ast.SelectorExpr{
+		X:   &ast.Ident{Name: "cmp"},
+		Sel: &ast.Ident{Name: "Ordered"},
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	err := printer.Fprint(buf, token.NewFileSet(), s)
+	if err != nil {
+		return analysis.SuggestedFix{}, fmt.Errorf("print suggested fix: %w", err)
+	}
+
+	return analysis.SuggestedFix{
+		TextEdits: []analysis.TextEdit{{
+			Pos:     selExpr.Pos(),
+			End:     selExpr.End(),
 			NewText: buf.Bytes(),
 		}},
 	}, nil
