@@ -227,10 +227,6 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	}
 
 	// constraints
-	for _, diagnostic := range resultExpConstraints.Diagnostics {
-		pass.Report(diagnostic)
-	}
-
 	a.suggestReplaceImport(pass, imports, resultExpConstraints.shouldKeepImport, pkgExpConstraints, pkgComp)
 
 	return nil, nil
@@ -250,17 +246,7 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 		return analysis.Diagnostic{}, false
 	}
 
-	obj := pass.TypesInfo.Uses[ident]
-	if obj == nil {
-		return analysis.Diagnostic{}, false
-	}
-
-	pkg, ok := obj.(*types.PkgName)
-	if !ok {
-		return analysis.Diagnostic{}, false
-	}
-
-	if pkg.Imported().Path() != importPath {
+	if !isPackageUsed(pass, ident, importPath) {
 		return analysis.Diagnostic{}, false
 	}
 
@@ -292,17 +278,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr, re
 		return
 	}
 
-	obj := pass.TypesInfo.Uses[ident]
-	if obj == nil {
-		return
-	}
-
-	pkg, ok := obj.(*types.PkgName)
-	if !ok {
-		return
-	}
-
-	if pkg.Imported().Path() != pkgExpConstraints {
+	if !isPackageUsed(pass, ident, pkgExpConstraints) {
 		return
 	}
 
@@ -331,7 +307,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr, re
 		}
 	}
 
-	result.Diagnostics = append(result.Diagnostics, diagnostic)
+	pass.Report(diagnostic)
 }
 
 func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath, stdPackage string) {
@@ -424,6 +400,24 @@ func suggestedFixForConstraintsOrder(selExpr *ast.SelectorExpr) (analysis.Sugges
 			NewText: buf.Bytes(),
 		}},
 	}, nil
+}
+
+func isPackageUsed(pass *analysis.Pass, ident *ast.Ident, importPath string) bool {
+	obj := pass.TypesInfo.Uses[ident]
+	if obj == nil {
+		return false
+	}
+
+	pkg, ok := obj.(*types.PkgName)
+	if !ok {
+		return false
+	}
+
+	if pkg.Imported().Path() != importPath {
+		return false
+	}
+
+	return true
 }
 
 func getGoVersion(pass *analysis.Pass) int {
