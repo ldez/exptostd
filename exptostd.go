@@ -393,7 +393,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, selExpr *ast.Sele
 
 	diagnostic := analysis.Diagnostic{
 		Pos:     selExpr.Pos(),
-		Message: "golang.org/x/exp/constraints.Ordered can be replaced by cmp.Ordered",
+		Message: fmt.Sprintf("golang.org/x/exp/constraints.%s can be replaced by %s", selExpr.Sel.Name, rp.Text),
 	}
 
 	if rp.Suggested != nil {
