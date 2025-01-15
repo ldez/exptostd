@@ -300,7 +300,7 @@ func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, expr ast.Expr) {
 		return
 	}
 
-	if rp.MinGo > a.goVersion {
+	if !a.skipGoVersionDetection && rp.MinGo > a.goVersion {
 		a.shouldKeepExpConstraints = true
 		return
 	}
