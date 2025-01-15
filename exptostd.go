@@ -31,23 +31,17 @@ type Result struct {
 	Diagnostics      []analysis.Diagnostic
 }
 
-type stdReplacement struct {
+type stdReplacement[T ast.Expr] struct {
 	MinGo     int
 	Text      string
-	Suggested func(callExpr *ast.CallExpr) (analysis.SuggestedFix, error)
-}
-
-type selectorReplacement struct {
-	MinGo     int
-	Text      string
-	Suggested func(callExpr *ast.SelectorExpr) (analysis.SuggestedFix, error)
+	Suggested func(callExpr T) (analysis.SuggestedFix, error)
 }
 
 type analyzer struct {
-	mapsPkgReplacements   map[string]stdReplacement
-	slicesPkgReplacements map[string]stdReplacement
+	mapsPkgReplacements   map[string]stdReplacement[*ast.CallExpr]
+	slicesPkgReplacements map[string]stdReplacement[*ast.CallExpr]
 
-	constraintsPkgReplacements map[string]selectorReplacement
+	constraintsPkgReplacements map[string]stdReplacement[*ast.SelectorExpr]
 	constraintsDiagnostics     []analysis.Diagnostic
 	shouldKeepExpConstraints   bool
 
@@ -61,7 +55,7 @@ func NewAnalyzer() *analysis.Analyzer {
 
 	l := &analyzer{
 		skipGoVersionDetection: skip,
-		mapsPkgReplacements: map[string]stdReplacement{
+		mapsPkgReplacements: map[string]stdReplacement[*ast.CallExpr]{
 			"Keys":       {MinGo: go123, Text: "slices.Collect(maps.Keys())", Suggested: suggestedFixForKeysOrValues},
 			"Values":     {MinGo: go123, Text: "slices.Collect(maps.Values())", Suggested: suggestedFixForKeysOrValues},
 			"Equal":      {MinGo: go121, Text: "maps.Equal()"},
@@ -71,7 +65,7 @@ func NewAnalyzer() *analysis.Analyzer {
 			"DeleteFunc": {MinGo: go121, Text: "maps.DeleteFunc()"},
 			"Clear":      {MinGo: go121, Text: "clear()", Suggested: suggestedFixForClear},
 		},
-		slicesPkgReplacements: map[string]stdReplacement{
+		slicesPkgReplacements: map[string]stdReplacement[*ast.CallExpr]{
 			"Equal":        {MinGo: go121, Text: "slices.Equal()"},
 			"EqualFunc":    {MinGo: go121, Text: "slices.EqualFunc()"},
 			"Compare":      {MinGo: go121, Text: "slices.Compare()"},
@@ -103,7 +97,7 @@ func NewAnalyzer() *analysis.Analyzer {
 			"BinarySearch":     {MinGo: go121, Text: "slices.BinarySearch()"},
 			"BinarySearchFunc": {MinGo: go121, Text: "slices.BinarySearchFunc()"},
 		},
-		constraintsPkgReplacements: map[string]selectorReplacement{
+		constraintsPkgReplacements: map[string]stdReplacement[*ast.SelectorExpr]{
 			"Ordered": {MinGo: go121, Text: "cmp.Ordered", Suggested: suggestedFixForConstraintsOrder},
 		},
 	}
@@ -246,7 +240,7 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 }
 
 func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
-	replacements map[string]stdReplacement,
+	replacements map[string]stdReplacement[*ast.CallExpr],
 	selExpr *ast.SelectorExpr, ident *ast.Ident, callExpr *ast.CallExpr,
 	importPath string,
 ) (analysis.Diagnostic, bool) {
