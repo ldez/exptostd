@@ -163,7 +163,6 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 
 			case "slices":
 				diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, node, "golang.org/x/exp/slices")
-
 				if usage {
 					resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
 				}
