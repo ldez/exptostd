@@ -41,6 +41,9 @@ type analyzer struct {
 	mapsPkgReplacements   map[string]stdReplacement
 	slicesPkgReplacements map[string]stdReplacement
 
+	constraintsDiagnostics   []analysis.Diagnostic
+	shouldKeepExpConstraints bool
+
 	skipGoVersionDetection bool
 	goVersion              int
 }
@@ -123,47 +126,48 @@ func (a *analyzer) run(pass *analysis.Pass) (any, error) {
 	var resultExpSlices Result
 
 	insp.Preorder(nodeFilter, func(n ast.Node) {
-		if importSpec, ok := n.(*ast.ImportSpec); ok {
+		switch n := n.(type) {
+		case *ast.ImportSpec:
+			importSpec := n
+
 			// skip aliases
 			if importSpec.Name == nil || importSpec.Name.Name == "" {
 				imports[trimImportPath(importSpec)] = importSpec
 			}
 
 			return
-		}
 
-		callExpr, ok := n.(*ast.CallExpr)
-		if !ok {
-			return
-		}
+		case *ast.CallExpr:
+			callExpr := n
 
-		selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return
-		}
-
-		ident, ok := selExpr.X.(*ast.Ident)
-		if !ok {
-			return
-		}
-
-		switch ident.Name {
-		case "maps":
-			diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
-			if usage {
-				pass.Report(diagnostic)
+			selExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return
 			}
 
-			shouldKeepExpMaps = shouldKeepExpMaps || !usage
-
-		case "slices":
-			diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
-
-			if usage {
-				resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
+			ident, ok := selExpr.X.(*ast.Ident)
+			if !ok {
+				return
 			}
 
-			resultExpSlices.shouldKeepImport = resultExpSlices.shouldKeepImport || !usage
+			switch ident.Name {
+			case "maps":
+				diagnostic, usage := a.detectPackageUsage(pass, a.mapsPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/maps")
+				if usage {
+					pass.Report(diagnostic)
+				}
+
+				shouldKeepExpMaps = shouldKeepExpMaps || !usage
+
+			case "slices":
+				diagnostic, usage := a.detectPackageUsage(pass, a.slicesPkgReplacements, selExpr, ident, callExpr, "golang.org/x/exp/slices")
+
+				if usage {
+					resultExpSlices.Diagnostics = append(resultExpSlices.Diagnostics, diagnostic)
+				}
+
+				resultExpSlices.shouldKeepImport = resultExpSlices.shouldKeepImport || !usage
+			}
 		}
 	})
 
