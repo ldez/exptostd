@@ -284,6 +284,54 @@ func (a *analyzer) detectPackageUsage(pass *analysis.Pass,
 	return diagnostic, true
 }
 
+func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, selExpr *ast.SelectorExpr) {
+	ident, ok := selExpr.X.(*ast.Ident)
+	if !ok {
+		return
+	}
+
+	obj := pass.TypesInfo.Uses[ident]
+	if obj == nil {
+		return
+	}
+
+	pkg, ok := obj.(*types.PkgName)
+	if !ok {
+		return
+	}
+
+	if pkg.Imported().Path() != "golang.org/x/exp/constraints" {
+		return
+	}
+
+	rp, ok := a.constraintsPkgReplacements[selExpr.Sel.Name]
+	if !ok {
+		a.shouldKeepExpConstraints = true
+		return
+	}
+
+	if rp.MinGo > a.goVersion {
+		a.shouldKeepExpConstraints = true
+		return
+	}
+
+	diagnostic := analysis.Diagnostic{
+		Pos:     selExpr.Pos(),
+		Message: fmt.Sprintf("golang.org/x/exp/constraints.%s can be replaced by %s", selExpr.Sel.Name, rp.Text),
+	}
+
+	if rp.Suggested != nil {
+		fix, err := rp.Suggested(selExpr)
+		if err != nil {
+			diagnostic.Message = fmt.Sprintf("Suggested fix error: %v", err)
+		} else {
+			diagnostic.SuggestedFixes = append(diagnostic.SuggestedFixes, fix)
+		}
+	}
+
+	a.constraintsDiagnostics = append(a.constraintsDiagnostics, diagnostic)
+}
+
 func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]*ast.ImportSpec, shouldKeep bool, importPath string, stdPackage string) {
 	imp, ok := imports[importPath]
 	if !ok || shouldKeep {
@@ -352,54 +400,6 @@ func suggestedFixForKeysOrValues(callExpr *ast.CallExpr) (analysis.SuggestedFix,
 			NewText: buf.Bytes(),
 		}},
 	}, nil
-}
-
-func (a *analyzer) detectConstraintsUsage(pass *analysis.Pass, selExpr *ast.SelectorExpr) {
-	ident, ok := selExpr.X.(*ast.Ident)
-	if !ok {
-		return
-	}
-
-	obj := pass.TypesInfo.Uses[ident]
-	if obj == nil {
-		return
-	}
-
-	pkg, ok := obj.(*types.PkgName)
-	if !ok {
-		return
-	}
-
-	if pkg.Imported().Path() != "golang.org/x/exp/constraints" {
-		return
-	}
-
-	rp, ok := a.constraintsPkgReplacements[selExpr.Sel.Name]
-	if !ok {
-		a.shouldKeepExpConstraints = true
-		return
-	}
-
-	if rp.MinGo > a.goVersion {
-		a.shouldKeepExpConstraints = true
-		return
-	}
-
-	diagnostic := analysis.Diagnostic{
-		Pos:     selExpr.Pos(),
-		Message: fmt.Sprintf("golang.org/x/exp/constraints.%s can be replaced by %s", selExpr.Sel.Name, rp.Text),
-	}
-
-	if rp.Suggested != nil {
-		fix, err := rp.Suggested(selExpr)
-		if err != nil {
-			diagnostic.Message = fmt.Sprintf("Suggested fix error: %v", err)
-		} else {
-			diagnostic.SuggestedFixes = append(diagnostic.SuggestedFixes, fix)
-		}
-	}
-
-	a.constraintsDiagnostics = append(a.constraintsDiagnostics, diagnostic)
 }
 
 func suggestedFixForConstraintsOrder(selExpr *ast.SelectorExpr) (analysis.SuggestedFix, error) {
