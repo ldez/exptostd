@@ -65,8 +65,8 @@ func NewAnalyzer() *analysis.Analyzer {
 	l := &analyzer{
 		skipGoVersionDetection: skip,
 		mapsPkgReplacements: map[string]stdReplacement[*ast.CallExpr]{
-			"Keys":       {MinGo: go123, Text: "slices.Collect(maps.Keys())", Suggested: suggestedFixForKeysOrValues},
-			"Values":     {MinGo: go123, Text: "slices.Collect(maps.Values())", Suggested: suggestedFixForKeysOrValues},
+			"Keys":       {MinGo: go123, Text: "slices.AppendSeq(make([]T, 0, len(data)), maps.Keys(data))", Suggested: suggestedFixForKeysOrValues},
+			"Values":     {MinGo: go123, Text: "slices.AppendSeq(make([]T, 0, len(data)), maps.Values(data))", Suggested: suggestedFixForKeysOrValues},
 			"Equal":      {MinGo: go121, Text: "maps.Equal()"},
 			"EqualFunc":  {MinGo: go121, Text: "maps.EqualFunc()"},
 			"Clone":      {MinGo: go121, Text: "maps.Clone()"},
@@ -356,12 +356,34 @@ func suggestedFixForClear(callExpr *ast.CallExpr) (analysis.SuggestedFix, error)
 }
 
 func suggestedFixForKeysOrValues(callExpr *ast.CallExpr) (analysis.SuggestedFix, error) {
+	var name string
+	if ident, ok := callExpr.Args[0].(*ast.Ident); ok {
+		name = ident.Name
+	}
+
 	s := &ast.CallExpr{
 		Fun: &ast.SelectorExpr{
-			X:   &ast.Ident{Name: pkgSlices},
-			Sel: &ast.Ident{Name: "Collect"},
+			X:   &ast.Ident{Name: "slices"},
+			Sel: &ast.Ident{Name: "AppendSeq"},
 		},
-		Args: []ast.Expr{callExpr},
+		Args: []ast.Expr{
+			&ast.CallExpr{
+				Fun: &ast.Ident{Name: "make"},
+				Args: []ast.Expr{
+					&ast.ArrayType{
+						Elt: &ast.Ident{Name: "T"}, // TODO(ldez) improve the type detection.
+					},
+					&ast.BasicLit{Kind: token.INT, Value: "0"},
+					&ast.CallExpr{
+						Fun: &ast.Ident{Name: "len"},
+						Args: []ast.Expr{
+							&ast.Ident{Name: name},
+						},
+					},
+				},
+			},
+			callExpr,
+		},
 	}
 
 	buf := bytes.NewBuffer(nil)
