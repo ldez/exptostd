@@ -25,3 +25,27 @@ func _(m, a map[string]string) {
 
 	maps.Clear(m) // want `golang.org/x/exp/maps.Clear\(\) can be replaced by clear\(\)`
 }
+
+type foo struct {
+	m map[string]int
+}
+
+func _() {
+
+	f := foo{
+		m: map[string]int{
+			"foo": 1,
+			"bar": 2,
+		},
+	}
+
+	maps.Keys(f.m) // want `golang.org/x/exp/maps\.Keys\(\) can be replaced by slices\.AppendSeq\(make\(\[\]T, 0, len\(data\)\), maps\.Keys\(data\)\)`
+}
+
+func _() {
+	maps.Keys(someFunc().m) // want `golang.org/x/exp/maps\.Keys\(\) can be replaced by slices\.AppendSeq\(make\(\[\]T, 0, len\(data\)\), maps\.Keys\(data\)\)`
+}
+
+func someFunc() foo {
+	return foo{}
+}
