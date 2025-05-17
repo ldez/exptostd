@@ -46,7 +46,7 @@ func runWithSuggestedFixes(t *testing.T, a *analysis.Analyzer, dir string, patte
 	tempDir := t.TempDir()
 
 	// Needs to be run outside testdata.
-	err = CopyFS(tempDir, os.DirFS(filepath.Join(analysistest.TestData(), "src")))
+	err = os.CopyFS(tempDir, os.DirFS(filepath.Join(analysistest.TestData(), "src")))
 	if err != nil {
 		t.Fatal(err)
 	}
