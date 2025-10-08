@@ -24,6 +24,7 @@ func TestAnalyzer(t *testing.T) {
 		{dir: "expalias"},
 		{dir: "expconstraints"},
 		{dir: "expconstraintskeep"},
+		{dir: "expconstraints_UnaryExpr"},
 	}
 
 	for _, test := range testCases {
