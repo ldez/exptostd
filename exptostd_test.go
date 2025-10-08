@@ -36,17 +36,10 @@ func TestAnalyzer(t *testing.T) {
 func runWithSuggestedFixes(t *testing.T, a *analysis.Analyzer, dir string, patterns ...string) []*analysistest.Result {
 	t.Helper()
 
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() { _ = os.Chdir(wd) }()
-
 	tempDir := t.TempDir()
 
 	// Needs to be run outside testdata.
-	err = os.CopyFS(tempDir, os.DirFS(filepath.Join(analysistest.TestData(), "src")))
+	err := os.CopyFS(tempDir, os.DirFS(filepath.Join(analysistest.TestData(), "src")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,12 +49,9 @@ func runWithSuggestedFixes(t *testing.T, a *analysis.Analyzer, dir string, patte
 
 	srcPath := filepath.Join(tempDir, filepath.FromSlash(dir))
 
-	err = os.Chdir(srcPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Chdir(srcPath)
 
-	output, err := exec.Command("go", "mod", "vendor").CombinedOutput()
+	output, err := exec.CommandContext(t.Context(), "go", "mod", "vendor").CombinedOutput()
 	if err != nil {
 		t.Log(string(output))
 		t.Fatal(err)
