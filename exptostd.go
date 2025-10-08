@@ -320,7 +320,7 @@ func (a *analyzer) suggestReplaceImport(pass *analysis.Pass, imports map[string]
 	pass.Report(analysis.Diagnostic{
 		Pos:     imp.Pos(),
 		End:     imp.End(),
-		Message: fmt.Sprintf("Import statement '%s' can be replaced by '%s'", src, stdPackage),
+		Message: fmt.Sprintf("Import statement '%s' may be replaced by '%s'", src, stdPackage),
 		SuggestedFixes: []analysis.SuggestedFix{{
 			TextEdits: []analysis.TextEdit{{
 				Pos:     imp.Path.Pos(),

@@ -1,7 +1,7 @@
 package expmaps
 
 import (
-	`golang.org/x/exp/maps` // want "Import statement 'golang.org/x/exp/maps' can be replaced by 'maps'"
+	`golang.org/x/exp/maps` // want "Import statement 'golang.org/x/exp/maps' may be replaced by 'maps'"
 )
 
 func _(m, a map[string]string) {

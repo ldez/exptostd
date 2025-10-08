@@ -3,7 +3,7 @@ package expconstraints
 import (
 	"time"
 
-	"golang.org/x/exp/constraints" // want "Import statement 'golang.org/x/exp/constraints' can be replaced by 'cmp'"
+	"golang.org/x/exp/constraints" // want "Import statement 'golang.org/x/exp/constraints' may be replaced by 'cmp'"
 )
 
 type _[T constraints.Ordered] []T // want `golang.org/x/exp/constraints\.Ordered can be replaced by cmp\.Ordered`
