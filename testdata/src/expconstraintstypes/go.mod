@@ -1,4 +1,4 @@
-module expslices
+module expconstraints
 
 go 1.23.0
 

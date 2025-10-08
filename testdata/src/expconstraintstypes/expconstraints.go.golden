@@ -1,0 +1,25 @@
+package expconstraintstypes
+
+import (
+		"cmp" // want `Import statement 'golang.org/x/exp/constraints' may be replaced by 'cmp'`
+)
+
+type A interface {
+		~string | ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr // want `golang.org/x/exp/constraints.Integer can be replaced by ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr`
+}
+
+type B interface {
+		~string | ~float32 | ~float64 // want `golang.org/x/exp/constraints.Float can be replaced by ~float32 | ~float64`
+}
+
+type C interface {
+		~string | ~int | ~int8 | ~int16 | ~int32 | ~int64 // want `golang.org/x/exp/constraints.Float can be replaced by ~int | ~int8 | ~int16 | ~int32 | ~int64`
+}
+
+type E interface {
+		~string | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr // want `golang.org/x/exp/constraints.Float can be replaced by ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr`
+}
+
+type F interface {
+		~string | ~complex64 | ~complex128 // want `golang.org/x/exp/constraints.Float can be replaced by ~complex64 | ~complex128`
+}

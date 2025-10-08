@@ -49,6 +49,11 @@ Actual detections:
 
 - `golang.org/x/exp/constraints`:
   - `Ordered`
+  - `Float`
+  - `Integer`
+  - `Signed`
+  - `Unsigned`
+  - `Complex`
 
 ## Usages
 

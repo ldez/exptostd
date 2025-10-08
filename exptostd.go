@@ -107,6 +107,31 @@ func NewAnalyzer() *analysis.Analyzer {
 		},
 		constraintsPkgReplacements: map[string]stdReplacement[*ast.SelectorExpr]{
 			"Ordered": {MinGo: go121, Text: "cmp.Ordered", Suggested: suggestedFixForConstraintsOrder},
+			"Float": {
+				MinGo:     go121,
+				Text:      "~float32 | ~float64",
+				Suggested: suggestedFixForConstraintsTypes("~float32 | ~float64"),
+			},
+			"Integer": {
+				MinGo:     go121,
+				Text:      "~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr",
+				Suggested: suggestedFixForConstraintsTypes("~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr"),
+			},
+			"Signed": {
+				MinGo:     go121,
+				Text:      "~int | ~int8 | ~int16 | ~int32 | ~int64",
+				Suggested: suggestedFixForConstraintsTypes("~int | ~int8 | ~int16 | ~int32 | ~int64"),
+			},
+			"Unsigned": {
+				MinGo:     go121,
+				Text:      "~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr",
+				Suggested: suggestedFixForConstraintsTypes("~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr"),
+			},
+			"Complex": {
+				MinGo:     go121,
+				Text:      "~complex64 | ~complex128",
+				Suggested: suggestedFixForConstraintsTypes("~complex64 | ~complex128"),
+			},
 		},
 	}
 
@@ -414,6 +439,18 @@ func suggestedFixForConstraintsOrder(selExpr *ast.SelectorExpr) (analysis.Sugges
 			NewText: buf.Bytes(),
 		}},
 	}, nil
+}
+
+func suggestedFixForConstraintsTypes(repl string) func(selExpr *ast.SelectorExpr) (analysis.SuggestedFix, error) {
+	return func(selExpr *ast.SelectorExpr) (analysis.SuggestedFix, error) {
+		return analysis.SuggestedFix{
+			TextEdits: []analysis.TextEdit{{
+				Pos:     selExpr.Pos(),
+				End:     selExpr.End(),
+				NewText: []byte(repl),
+			}},
+		}, nil
+	}
 }
 
 func isPackageUsed(pass *analysis.Pass, ident *ast.Ident, importPath string) bool {

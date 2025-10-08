@@ -23,7 +23,7 @@ func TestAnalyzer(t *testing.T) {
 		{dir: "expmixed"},
 		{dir: "expalias"},
 		{dir: "expconstraints"},
-		{dir: "expconstraintskeep"},
+		{dir: "expconstraintstypes"},
 	}
 
 	for _, test := range testCases {
