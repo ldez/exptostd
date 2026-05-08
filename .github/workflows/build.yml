@@ -1,4 +1,4 @@
-name: Go Matrix
+name: Build and Test
 
 on:
   push:
@@ -34,4 +34,4 @@ jobs:
         run: go test -v -cover ./...
 
       - name: Build
-        run: go build -v -ldflags "-s -w" -trimpath
+        run: go build -ldflags "-s -w" -trimpath ./cmd/exptostd/
